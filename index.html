@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UTM Coordinate & GPS Precision</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card-value {
+            transition: all 0.3s ease-in-out;
+        }
+        .gemini-response p {
+            margin-bottom: 1rem;
+        }
+         .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5; /* Indigo to match theme */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen py-8">
+
+    <div class="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 space-y-6">
+        <!-- Header Section -->
+        <div class="text-center">
+            <h1 class="text-2xl font-bold text-slate-900">UTM Coordinate Finder</h1>
+            <p class="text-slate-600 mt-1">Get your precise UTM location data.</p>
+        </div>
+
+        <!-- Action Button -->
+        <button id="getLocationBtn" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50">
+            Find My Position
+        </button>
+
+        <!-- Status Display -->
+        <div id="status" class="text-center text-sm font-medium text-slate-600 h-5"></div>
+
+        <!-- Results Display -->
+        <div id="results" class="space-y-4 hidden">
+            <!-- GPS Precision Card -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <h3 class="font-semibold text-slate-800">GPS Precision</h3>
+                <p class="text-3xl font-bold text-slate-700 mt-1 card-value"><span id="accuracy">--</span> meters</p>
+            </div>
+
+            <!-- UTM Coordinates Card -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <h3 class="font-semibold text-slate-800">UTM Coordinates (WGS84)</h3>
+                <div class="grid grid-cols-2 gap-4 mt-2 text-center">
+                    <div>
+                        <p class="text-xs text-slate-500">Zone</p>
+                        <p class="font-mono text-lg font-semibold text-slate-900 card-value" id="utm-zone">--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500">Hemisphere</p>
+                        <p class="font-mono text-lg font-semibold text-slate-900 card-value" id="utm-hemisphere">--</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-xs text-slate-500">Easting (X)</p>
+                        <p class="font-mono text-lg font-semibold text-slate-900 card-value" id="utm-easting">--</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-xs text-slate-500">Northing (Y)</p>
+                        <p class="font-mono text-lg font-semibold text-slate-900 card-value" id="utm-northing">--</p>
+                    </div>
+                </div>
+            </div>
+
+             <!-- Action Buttons Section -->
+            <div class="space-y-2">
+                <button id="saveLocationBtn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 hidden">
+                    Save Location
+                </button>
+                <button id="geminiBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 hidden">
+                    Get Location Analysis
+                </button>
+            </div>
+
+            <div id="geminiResultCard" class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 hidden">
+                <h3 class="font-semibold text-indigo-800">Location Analysis</h3>
+                <div id="geminiLoader" class="loader hidden"></div>
+                <div id="geminiResponse" class="text-slate-700 mt-2 text-sm gemini-response"></div>
+            </div>
+
+            <!-- Saved Locations Section -->
+            <div id="savedLocationsContainer" class="hidden">
+                <h3 class="text-lg font-semibold text-slate-900 mt-6 border-b pb-2">Saved Locations</h3>
+                <div id="savedLocationsList" class="mt-4 space-y-3 max-h-60 overflow-y-auto pr-2">
+                    <!-- Saved items will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const getLocationBtn = document.getElementById('getLocationBtn');
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const geminiBtn = document.getElementById('geminiBtn');
+        const geminiResultCard = document.getElementById('geminiResultCard');
+        const geminiLoader = document.getElementById('geminiLoader');
+        const geminiResponseEl = document.getElementById('geminiResponse');
+        const saveLocationBtn = document.getElementById('saveLocationBtn');
+        const savedLocationsContainer = document.getElementById('savedLocationsContainer');
+        const savedLocationsList = document.getElementById('savedLocationsList');
+
+        // Result display elements
+        const accuracyEl = document.getElementById('accuracy');
+        const utmZoneEl = document.getElementById('utm-zone');
+        const utmHemisphereEl = document.getElementById('utm-hemisphere');
+        const utmEastingEl = document.getElementById('utm-easting');
+        const utmNorthingEl = document.getElementById('utm-northing');
+
+        let currentLat, currentLon, currentAccuracy;
+        let savedLocations = [];
+
+        getLocationBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                statusEl.textContent = 'Geolocation is not supported by your browser.';
+                return;
+            }
+            statusEl.textContent = 'Locating...';
+            resultsEl.classList.add('hidden');
+            geminiBtn.classList.add('hidden');
+            saveLocationBtn.classList.add('hidden');
+            geminiResultCard.classList.add('hidden');
+            geminiResponseEl.innerHTML = '';
+
+            navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+                enableHighAccuracy: true
+            });
+        });
+
+        geminiBtn.addEventListener('click', getNearbyInfo);
+        saveLocationBtn.addEventListener('click', saveCurrentLocation);
+
+        function handleSuccess(position) {
+            statusEl.textContent = 'Location Found!';
+            resultsEl.classList.remove('hidden');
+            geminiBtn.classList.remove('hidden');
+            saveLocationBtn.classList.remove('hidden');
+
+            currentLat = position.coords.latitude;
+            currentLon = position.coords.longitude;
+            currentAccuracy = position.coords.accuracy;
+
+            const utm = convertLatLonToUTM(currentLat, currentLon);
+
+            // Update UI with faded-in values
+            updateValue(accuracyEl, Math.round(currentAccuracy));
+            
+            updateValue(utmZoneEl, `${utm.zoneNum}${utm.zoneLetter}`);
+            updateValue(utmHemisphereEl, utm.hemisphere);
+            updateValue(utmEastingEl, utm.easting.toFixed(0));
+            updateValue(utmNorthingEl, utm.northing.toFixed(0));
+        }
+
+        function handleError(error) {
+            let errorMessage = 'An unknown error occurred.';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "User denied the request for Geolocation.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "The request to get user location timed out.";
+                    break;
+                case error.UNKNOWN_ERROR:
+                    errorMessage = "An unknown error occurred.";
+                    break;
+            }
+            statusEl.textContent = errorMessage;
+        }
+
+        function updateValue(element, value) {
+            element.classList.add('opacity-0');
+            setTimeout(() => {
+                element.textContent = value;
+                element.classList.remove('opacity-0');
+            }, 100);
+        }
+
+        // --- Save Location Feature ---
+        function saveCurrentLocation() {
+            if (currentLat === undefined || currentLon === undefined) return;
+
+            const timestamp = new Date();
+            const locationData = {
+                id: timestamp.getTime(),
+                timestamp: timestamp.toLocaleString(),
+                accuracy: Math.round(currentAccuracy),
+                utmZone: utmZoneEl.textContent,
+                utmEasting: utmEastingEl.textContent,
+                utmNorthing: utmNorthingEl.textContent,
+            };
+
+            savedLocations.unshift(locationData); // Add to the beginning
+            renderSavedLocations();
+        }
+
+        function renderSavedLocations() {
+            if (savedLocations.length === 0) {
+                savedLocationsContainer.classList.add('hidden');
+                return;
+            }
+
+            savedLocationsContainer.classList.remove('hidden');
+            savedLocationsList.innerHTML = ''; // Clear existing list
+
+            savedLocations.forEach(location => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm animate-fade-in';
+                itemEl.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-slate-800">Saved: ${location.timestamp}</span>
+                    </div>
+                    <div class="mt-2 space-y-1 text-slate-600 font-mono">
+                        <div>Acc: <span class="font-semibold text-slate-800 float-right">${location.accuracy}m</span></div>
+                        <div>Zone: <span class="font-semibold text-slate-800 float-right">${location.utmZone}</span></div>
+                        <div>Easting: <span class="font-semibold text-slate-800 float-right">${location.utmEasting}</span></div>
+                        <div>Northing: <span class="font-semibold text-slate-800 float-right">${location.utmNorthing}</span></div>
+                    </div>
+                `;
+                savedLocationsList.appendChild(itemEl);
+            });
+        }
+
+        // --- Gemini API Integration ---
+        async function getNearbyInfo() {
+            if (!currentLat || !currentLon) {
+                geminiResponseEl.textContent = 'Could not get location. Please try again.';
+                return;
+            }
+
+            geminiResultCard.classList.remove('hidden');
+            geminiLoader.classList.remove('hidden');
+            geminiResponseEl.innerHTML = '';
+            geminiBtn.disabled = true;
+
+            const systemPrompt = "You are a helpful and friendly local tour guide. Based on the provided latitude and longitude, describe the location. Mention any interesting landmarks, natural features, or general characteristics of the area. Keep the tone conversational and the response concise, under 150 words.";
+            const userQuery = `Tell me about the location at latitude: ${currentLat}, longitude: ${currentLon}.`;
+            const apiKey = ""; // API key is handled by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API call failed with status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const text = candidate.content.parts[0].text;
+                    geminiResponseEl.innerHTML = text.replace(/\n/g, '<br>'); // Basic formatting
+                } else {
+                    throw new Error("Could not extract text from Gemini response.");
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                geminiResponseEl.textContent = "Sorry, I couldn't fetch information about this location right now. Please try again later.";
+            } finally {
+                geminiLoader.classList.add('hidden');
+                geminiBtn.disabled = false;
+            }
+        }
+
+
+        /**
+         * Converts Latitude and Longitude to UTM coordinates.
+         * Based on the WGS84 ellipsoid.
+         * @param {number} lat - Latitude in decimal degrees.
+         * @param {number} lon - Longitude in decimal degrees.
+         * @returns {object} An object containing UTM easting, northing, zone number, zone letter, and hemisphere.
+         */
+        function convertLatLonToUTM(lat, lon) {
+            // WGS84 Ellipsoid constants
+            const a = 6378137; // semi-major axis
+            const eccSquared = 0.00669438;
+            const k0 = 0.9996;
+
+            const lonOrigin = (Math.floor((lon + 180) / 6) * 6) - 177;
+            const lonOriginRad = lonOrigin * Math.PI / 180;
+
+            const latRad = lat * Math.PI / 180;
+            const lonRad = lon * Math.PI / 180;
+
+            const eccPrimeSquared = eccSquared / (1 - eccSquared);
+
+            const N = a / Math.sqrt(1 - eccSquared * Math.sin(latRad) * Math.sin(latRad));
+            const T = Math.tan(latRad) * Math.tan(latRad);
+            const C = eccPrimeSquared * Math.cos(latRad) * Math.cos(latRad);
+            const A = Math.cos(latRad) * (lonRad - lonOriginRad);
+
+            const M = a * ((1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * eccSquared * eccSquared * eccSquared / 256) * latRad -
+                (3 * eccSquared / 8 + 3 * eccSquared * eccSquared / 32 + 45 * eccSquared * eccSquared * eccSquared / 1024) * Math.sin(2 * latRad) +
+                (15 * eccSquared * eccSquared / 256 + 45 * eccSquared * eccSquared * eccSquared / 1024) * Math.sin(4 * latRad) -
+                (35 * eccSquared * eccSquared * eccSquared / 3072) * Math.sin(6 * latRad));
+
+            const UTMEasting = (k0 * N * (A + (1 - T + C) * A * A * A / 6 +
+                (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
+                500000.0);
+
+            let UTMNorthing = (k0 * (M + N * Math.tan(latRad) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
+                (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720)));
+
+            if (lat < 0) {
+                UTMNorthing += 10000000.0; // 10000000 meter offset for southern hemisphere
+            }
+            
+            const zoneNum = Math.floor((lon + 180) / 6) + 1;
+            
+            return {
+                easting: UTMEasting,
+                northing: UTMNorthing,
+                zoneNum: zoneNum,
+                zoneLetter: getUTMZoneLetter(lat),
+                hemisphere: lat >= 0 ? 'North' : 'South'
+            };
+        }
+        
+        /**
+         * Determines the UTM zone letter based on latitude.
+         * @param {number} lat - Latitude in decimal degrees.
+         * @returns {string} The UTM zone letter.
+         */
+        function getUTMZoneLetter(lat) {
+            const letters = 'CDEFGHJKLMNPQRSTUVWXX';
+            if (-80 <= lat && lat <= 84) {
+                return letters.charAt(Math.floor(lat + 80) / 8);
+            } else {
+                return 'Z'; // Special case for poles
+            }
+        }
+    </script>
+
+</body>
+</html>
+
