@@ -47,9 +47,12 @@
         </div>
 
         <!-- Action Button -->
+    <div class="space-y-2">
         <button id="getLocationBtn" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50">
             Click to get Coords
         </button>
+        <button id="liveToggleBtn" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg hidden">Start Live Tracking</button>
+    </div>
 
         <!-- Status Display -->
         <div id="status" class="text-center text-sm font-medium text-slate-600 h-5"></div>
@@ -152,6 +155,8 @@
 
         let currentLat, currentLon, currentAccuracy;
         let savedLocations = [];
+        let watchId = null;
+        const liveToggleBtn = document.getElementById('liveToggleBtn');
 
         getLocationBtn.addEventListener('click', () => {
             if (!navigator.geolocation) {
@@ -167,6 +172,8 @@
             navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
                 enableHighAccuracy: true
             });
+            // show live toggle once we have the initial location UI
+            liveToggleBtn.classList.remove('hidden');
         });
 
     // geminiBtn.addEventListener('click', getNearbyInfo); // Removed geminiBtn event listener
@@ -187,6 +194,7 @@
             resultsEl.classList.remove('hidden');
             // (Get Location Analysis button removed)
             saveLocationBtn.classList.remove('hidden');
+            liveToggleBtn.classList.remove('hidden');
 
             currentLat = position.coords.latitude;
             currentLon = position.coords.longitude;
@@ -201,6 +209,40 @@
             updateValue(utmHemisphereEl, utm.hemisphere);
             updateValue(utmEastingEl, utm.easting.toFixed(0));
             updateValue(utmNorthingEl, utm.northing.toFixed(0));
+        }
+
+        // Live tracking
+        liveToggleBtn.addEventListener('click', () => {
+            if (watchId == null) startLiveTracking(); else stopLiveTracking();
+        });
+
+        function startLiveTracking() {
+            if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+            liveToggleBtn.textContent = 'Stop Live Tracking';
+            watchId = navigator.geolocation.watchPosition((pos) => {
+                // reuse handleSuccess-like updates but don't show alerts
+                currentLat = pos.coords.latitude;
+                currentLon = pos.coords.longitude;
+                currentAccuracy = pos.coords.accuracy;
+                const utm = convertLatLonToUTM(currentLat, currentLon);
+                updateValue(accuracyEl, Math.round(currentAccuracy));
+                updateValue(utmZoneEl, `${utm.zoneNum}${utm.zoneLetter}`);
+                updateValue(utmHemisphereEl, utm.hemisphere);
+                updateValue(utmEastingEl, utm.easting.toFixed(0));
+                updateValue(utmNorthingEl, utm.northing.toFixed(0));
+                resultsEl.classList.remove('hidden');
+                saveLocationBtn.classList.remove('hidden');
+            }, (err) => {
+                console.warn('watchPosition error', err);
+            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }
+
+        function stopLiveTracking() {
+            if (watchId != null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            liveToggleBtn.textContent = 'Start Live Tracking';
         }
 
         function handleError(error) {
