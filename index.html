@@ -84,6 +84,12 @@
                 <button id="saveLocationBtn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 hidden">
                     Save Location
                 </button>
+                <button id="downloadListBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 hidden">
+                    Download List (.txt)
+                </button>
+                <button id="clearListBtn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50 hidden">
+                    Clear All Saved
+                </button>
                 <button id="geminiBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 hidden">
                     Get Location Analysis
                 </button>
@@ -114,6 +120,8 @@
         const geminiLoader = document.getElementById('geminiLoader');
         const geminiResponseEl = document.getElementById('geminiResponse');
         const saveLocationBtn = document.getElementById('saveLocationBtn');
+    const downloadListBtn = document.getElementById('downloadListBtn');
+    const clearListBtn = document.getElementById('clearListBtn');
         const savedLocationsContainer = document.getElementById('savedLocationsContainer');
         const savedLocationsList = document.getElementById('savedLocationsList');
 
@@ -146,6 +154,8 @@
 
         geminiBtn.addEventListener('click', getNearbyInfo);
         saveLocationBtn.addEventListener('click', saveCurrentLocation);
+    downloadListBtn.addEventListener('click', downloadSavedLocations);
+    clearListBtn.addEventListener('click', clearSavedLocations);
 
         function handleSuccess(position) {
             statusEl.textContent = 'Location Found!';
@@ -216,10 +226,14 @@
         function renderSavedLocations() {
             if (savedLocations.length === 0) {
                 savedLocationsContainer.classList.add('hidden');
+                downloadListBtn.classList.add('hidden');
+                clearListBtn.classList.add('hidden');
                 return;
             }
 
             savedLocationsContainer.classList.remove('hidden');
+            downloadListBtn.classList.remove('hidden');
+            clearListBtn.classList.remove('hidden');
             savedLocationsList.innerHTML = ''; // Clear existing list
 
             savedLocations.forEach(location => {
@@ -228,6 +242,9 @@
                 itemEl.innerHTML = `
                     <div class="flex justify-between items-center">
                         <span class="font-semibold text-slate-800">Saved: ${location.timestamp}</span>
+                            <div class="flex items-center space-x-2">
+                                <button data-id="${location.id}" class="copy-btn bg-slate-200 hover:bg-slate-300 text-slate-800 px-2 py-1 rounded text-xs">Copy</button>
+                            </div>
                     </div>
                     <div class="mt-2 space-y-1 text-slate-600 font-mono">
                         <div>Acc: <span class="font-semibold text-slate-800 float-right">${location.accuracy}m</span></div>
@@ -238,7 +255,56 @@
                 `;
                 savedLocationsList.appendChild(itemEl);
             });
+
+                // Attach copy handlers
+                document.querySelectorAll('.copy-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const id = Number(e.currentTarget.getAttribute('data-id'));
+                        const loc = savedLocations.find(s => s.id === id);
+                        if (!loc) return;
+                        const text = formatLocationText(loc);
+                        navigator.clipboard?.writeText(text).then(() => {
+                            // brief visual feedback
+                            const orig = e.currentTarget.textContent;
+                            e.currentTarget.textContent = 'Copied';
+                            setTimeout(() => e.currentTarget.textContent = orig, 1200);
+                        }).catch(() => {
+                            // fallback
+                            alert(text);
+                        });
+                    });
+                });
         }
+
+            // Format a single location as plain text
+            function formatLocationText(loc) {
+                return `Saved: ${loc.timestamp}\nAccuracy: ${loc.accuracy} m\nZone: ${loc.utmZone}\nEasting: ${loc.utmEasting}\nNorthing: ${loc.utmNorthing}`;
+            }
+
+            // Build and download the saved locations as a .txt file
+            function downloadSavedLocations() {
+                if (savedLocations.length === 0) {
+                    alert('No saved locations to download.');
+                    return;
+                }
+
+                const lines = savedLocations.map((loc, idx) => `#${idx + 1}\n${formatLocationText(loc)}`).join('\n\n');
+                const blob = new Blob([lines], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `saved-locations-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            }
+
+            function clearSavedLocations() {
+                if (!confirm('Clear all saved locations?')) return;
+                savedLocations = [];
+                renderSavedLocations();
+            }
 
         // --- Gemini API Integration ---
         async function getNearbyInfo() {
@@ -366,4 +432,3 @@
 
 </body>
 </html>
-
